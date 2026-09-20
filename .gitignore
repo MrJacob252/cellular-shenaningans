@@ -1,0 +1,6 @@
+.vscode
+snake.c
+build/
+chip8-test-suite/
+ROMS/*
+chip-8.*
