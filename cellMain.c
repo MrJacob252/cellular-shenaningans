@@ -6,7 +6,7 @@
 // ************************************************************
 // Cell rules
 
-static const Uint8 neighborhood[9][2] = {
+static const Sint8 neighborhood[9][2] = {
 //    x   y
     {-1, -1}, { 0, -1}, { 1, -1},
     {-1,  0}, { 0,  0}, { 1,  0},
@@ -29,14 +29,15 @@ ScreenPxState ProcessCell(AppState *state, const Uint32 x, const Uint32 y)
     numLiveNeighbours = 0;
     for (i = 0; i < numNeighbours; i++)
     {
-        newX = (x + neighborhood[i][0]) % SCREEN_WIDTH_IN_PX;
-        newY = (y + neighborhood[i][1]) % SCREEN_HEIGHT_IN_PX;
+        // Add the height and width to ensure the calculation won't underflow in case of -1
+        newX = (x + neighborhood[i][0] + SCREEN_WIDTH_IN_PX) % SCREEN_WIDTH_IN_PX;
+        newY = (y + neighborhood[i][1] + SCREEN_HEIGHT_IN_PX) % SCREEN_HEIGHT_IN_PX;
 
         newLoc = (newY * SCREEN_WIDTH_IN_PX) + newX;
 
         if (newLoc != location)
         {
-            if (state->screen[newLoc] == PX_ON)
+            if ((state->screen[newLoc] & 1 ) == PX_ON)
             {
                 numLiveNeighbours++;
             }
@@ -81,6 +82,12 @@ SDL_AppResult HandleKeyEventDown(AppState *state, SDL_Scancode keyCode, SDL_Even
         case SDL_SCANCODE_SPACE:
             state->paused = !state->paused;
             // SDL_Log("%d\n", state->paused);
+            break;
+        case SDL_SCANCODE_R:
+            SDL_memset(state->screen, PX_OFF, sizeof(state->screen));
+            break;
+        case SDL_SCANCODE_S:
+            state->takeStep = true;
             break;
         default:
             break;
@@ -244,7 +251,7 @@ SDL_AppResult SDL_AppIterate(void *appsate)
     SDL_AppResult result = SDL_APP_CONTINUE;
 
     AppState *state = (AppState *)appsate;
-    static Uint8 newScreen[SCREEN_MATRIX_SIZE];
+    Uint8 newScreen[SCREEN_MATRIX_SIZE];
     Uint64 location;
     SDL_memset(newScreen, PX_OFF, sizeof(newScreen)); // New screen state
 
@@ -261,7 +268,7 @@ SDL_AppResult SDL_AppIterate(void *appsate)
     {
         Uint32 x, y;
         
-        if (!state->paused)
+        if ((!state->paused) || (state->takeStep))
         {
             for (y = 0; y < SCREEN_HEIGHT_IN_PX; y++)
             {
@@ -272,14 +279,14 @@ SDL_AppResult SDL_AppIterate(void *appsate)
                 }
             }
             SDL_memcpy(state->screen, newScreen, sizeof(state->screen));
+            state->takeStep = false;
         }
 
         state->timeAccumulator -= REFRESH_RATE_IN_MS;
         
         // Refresh screen onece per iteration
+        RefreshScreen(state);
     }
-
-    RefreshScreen(state);
 
     return result;
 }

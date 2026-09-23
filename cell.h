@@ -11,11 +11,11 @@
 // ************************************************************
 // Defines
 
-#define REFRESH_RATE_IN_HZ 60.0f
+#define REFRESH_RATE_IN_HZ 20.0f
 #define REFRESH_RATE_IN_MS (1000.0f / REFRESH_RATE_IN_HZ) // 60Hz ((1/60) * 1000)
 #define PIXEL_SIZE 24 // Size of the individual pixels of the screen
-#define SCREEN_WIDTH_IN_PX  64
-#define SCREEN_HEIGHT_IN_PX 32
+#define SCREEN_WIDTH_IN_PX  96
+#define SCREEN_HEIGHT_IN_PX 48
 #define SCREEN_MATRIX_SIZE (SCREEN_HEIGHT_IN_PX * SCREEN_WIDTH_IN_PX)
 #define NUM_PX_STATES 2 // On / Off
 
@@ -50,6 +50,7 @@ typedef struct
     Uint8 screen[SCREEN_MATRIX_SIZE];
     MouseState mouseState;
     bool paused;
+    bool takeStep;
     Uint64 lastTick;
     float timeAccumulator;
 } AppState;
