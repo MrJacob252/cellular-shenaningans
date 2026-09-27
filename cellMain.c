@@ -4,27 +4,42 @@
 #include "cell.h"
 
 // ************************************************************
-// Cell rules
+// Convay
 
-static const Sint8 neighborhood[9][2] = {
-//    x   y
-    {-1, -1}, { 0, -1}, { 1, -1},
-    {-1,  0}, { 0,  0}, { 1,  0},
-    {-1,  1}, { 0,  1}, { 1,  1},
-};
+void Convay(AppState *state, Uint8 *newScreen)
+{
+    const Sint8 neighborhood[9][2] = {
+    //    x   y
+        {-1, -1}, { 0, -1}, { 1, -1},
+        {-1,  0}, { 0,  0}, { 1,  0},
+        {-1,  1}, { 0,  1}, { 1,  1},
+    };
 
-// ************************************************************
-// Process Cell function
-ScreenPxState ProcessCell(AppState *state, const Uint32 x, const Uint32 y)
+    Uint32 x, y;
+    Uint64 location;
+
+    size_t numNeighbours = sizeof(neighborhood) / sizeof(neighborhood[0]);
+
+    for (y = 0; y < SCREEN_HEIGHT_IN_PX; y++)
+    {
+        for (x = 0; x < SCREEN_WIDTH_IN_PX; x++)
+        {
+            location = (y * SCREEN_WIDTH_IN_PX) + x;
+            newScreen[location] = ProcessCellConvay(state, x, y, neighborhood, numNeighbours);
+        }
+    }
+
+    return;
+}
+
+ScreenPxState ProcessCellConvay(AppState *state, const Uint32 x, const Uint32 y, const Sint8 neighborhood[9][2], const size_t numNeighbours)
 {
     Uint64 location = (y * SCREEN_WIDTH_IN_PX) + x;
     Uint64 newLoc;
     ScreenPxState cellState = state->screen[location] & 1;
     Uint32 i, newX, newY;
     Uint8 numLiveNeighbours;
-
-    size_t numNeighbours = sizeof(neighborhood) / sizeof(neighborhood[0]);
-
+    
     // Calculate number of live neighbours
     numLiveNeighbours = 0;
     for (i = 0; i < numNeighbours; i++)
@@ -66,7 +81,104 @@ ScreenPxState ProcessCell(AppState *state, const Uint32 x, const Uint32 y)
 }
 
 // ************************************************************
+// Rule 110 & 30
+
+void Rule110(AppState *state, Uint8 *newScreen)
+{
+    const Uint8 rules[8] = {
+        PX_OFF, // 000
+        PX_ON,  // 001
+        PX_ON,  // 010
+        PX_ON,  // 011
+        PX_OFF, // 100
+        PX_ON,  // 101
+        PX_ON,  // 110
+        PX_OFF, // 111
+    };
+    Uint8 ruleWidth = 3;
+
+    Process1DAlgorithm(state, newScreen, rules, ruleWidth);
+
+    return;
+}
+
+void Rule30(AppState *state, Uint8 *newScreen)
+{
+    const Uint8 rules[8] = {
+        PX_OFF, // 000
+        PX_ON,  // 001
+        PX_ON,  // 010
+        PX_ON,  // 011
+        PX_ON,  // 100
+        PX_OFF, // 101
+        PX_OFF, // 110
+        PX_OFF, // 111
+    };
+    Uint8 ruleWidth = 3;
+
+    Process1DAlgorithm(state, newScreen, rules, ruleWidth);
+
+    return;
+}
+
+void Rule184(AppState *state, Uint8 *newScreen) // Needs fixing
+{
+    const Uint8 rules[8] = {
+        PX_OFF, // 000
+        PX_OFF, // 001
+        PX_OFF, // 010
+        PX_ON,  // 011
+        PX_ON,  // 100
+        PX_ON,  // 101
+        PX_OFF, // 110
+        PX_ON,  // 111
+    };
+    Uint8 ruleWidth = 3;
+
+    Process1DAlgorithm(state, newScreen, rules, ruleWidth);
+
+    return;
+}
+
+void Process1DAlgorithm(AppState *state, Uint8 *newScreen, const Uint8 *rules, const Uint8 ruleWidth)
+{
+    Uint64 i; // Index in the new row
+    Uint64 offset; // Offset for processing the rule
+    Uint64 oldRow = SCREEN_HEIGHT_IN_PX - 2;
+    Uint64 newRow = SCREEN_HEIGHT_IN_PX - 1;
+    Uint8 currPattern = 0;
+    Uint64 locX, location, newLocation;
+
+    Uint16 ruleMask = UINT16_MAX >> (16 - ruleWidth);
+    Uint16 ruleSideSize = ruleWidth / 2;
+
+    // Shift the screen one row up
+    SDL_memcpy(newScreen, &state->screen[SCREEN_WIDTH_IN_PX], (SCREEN_MATRIX_SIZE - SCREEN_WIDTH_IN_PX));
+
+    for (i = 0; i < SCREEN_WIDTH_IN_PX; i++)
+    {
+        currPattern = 0;
+        for (offset = 0; offset < ruleWidth; offset++)
+        {
+            locX = (i + (offset - ruleSideSize + SCREEN_WIDTH_IN_PX)) % SCREEN_WIDTH_IN_PX;
+            location = (oldRow * SCREEN_WIDTH_IN_PX) + locX;
+            currPattern |= ((newScreen[location] & 1) << ((ruleWidth - 1) - offset));
+        }
+        newLocation = (newRow * SCREEN_WIDTH_IN_PX) + i;
+        newScreen[newLocation] = rules[currPattern & ruleMask] & 1;
+
+    }
+    
+    return;
+}
+
+// ************************************************************
 // Key handler
+
+void ClearScreen(AppState *state)
+{
+    SDL_memset(state->screen, PX_OFF, sizeof(state->screen));
+}
 
 SDL_AppResult HandleKeyEventDown(AppState *state, SDL_Scancode keyCode, SDL_EventType eventType)
 {
@@ -84,10 +196,23 @@ SDL_AppResult HandleKeyEventDown(AppState *state, SDL_Scancode keyCode, SDL_Even
             // SDL_Log("%d\n", state->paused);
             break;
         case SDL_SCANCODE_R:
-            SDL_memset(state->screen, PX_OFF, sizeof(state->screen));
+            ClearScreen(state);
             break;
         case SDL_SCANCODE_S:
             state->takeStep = true;
+            break;
+        case SDL_SCANCODE_1:
+        case SDL_SCANCODE_2:
+        case SDL_SCANCODE_3:
+        case SDL_SCANCODE_4:
+        case SDL_SCANCODE_5:
+        case SDL_SCANCODE_6:
+        case SDL_SCANCODE_7:
+        case SDL_SCANCODE_8:
+        case SDL_SCANCODE_9:
+        case SDL_SCANCODE_0:
+            ClearScreen(state);
+            state->selectedAlgorith = keyCode - SDL_SCANCODE_1;
             break;
         default:
             break;
@@ -183,7 +308,8 @@ void RefreshScreen(AppState *appstate)
 
     r.w = r.h = PIXEL_SIZE;
     // Set the drawing color to black and clear the screen
-    SDL_SetRenderDrawColor(appstate->renderer, (PX_OFF * 255), (PX_OFF * 255), (PX_OFF * 255), SDL_ALPHA_OPAQUE);
+    // SDL_SetRenderDrawColor(appstate->renderer, (PX_OFF * R(BG)), (PX_OFF * G(BG)), (PX_OFF * B(BG)), SDL_ALPHA_OPAQUE);
+    SDL_SetRenderDrawColor(appstate->renderer, R(BG), G(BG), B(BG), SDL_ALPHA_OPAQUE);
     SDL_RenderClear(appstate->renderer);
 
     for (y = 0; y < SCREEN_HEIGHT_IN_PX; y++)
@@ -194,7 +320,8 @@ void RefreshScreen(AppState *appstate)
             if (pxState == PX_ON) // Draw white rectangle where ON pixel should be
             {
                 SetPixelPosition(&r, x, y);
-                SDL_SetRenderDrawColor(appstate->renderer, (PX_ON * 255), (PX_ON * 255), (PX_ON * 255), SDL_ALPHA_OPAQUE);
+                // SDL_SetRenderDrawColor(appstate->renderer, (PX_ON * R(CELL_ON)), (PX_ON * G(CELL_ON)), (PX_ON * B(CELL_ON)), SDL_ALPHA_OPAQUE);
+                SDL_SetRenderDrawColor(appstate->renderer, R(CELL_ON), G(CELL_ON), B(CELL_ON), SDL_ALPHA_OPAQUE);
                 SDL_RenderFillRect(appstate->renderer, &r);
             }
         }
@@ -252,7 +379,6 @@ SDL_AppResult SDL_AppIterate(void *appsate)
 
     AppState *state = (AppState *)appsate;
     Uint8 newScreen[SCREEN_MATRIX_SIZE];
-    Uint64 location;
     SDL_memset(newScreen, PX_OFF, sizeof(newScreen)); // New screen state
 
     Uint64 now = SDL_GetTicks();
@@ -266,18 +392,9 @@ SDL_AppResult SDL_AppIterate(void *appsate)
     // several times.
     while (state->timeAccumulator >= REFRESH_RATE_IN_MS)
     {
-        Uint32 x, y;
-        
         if ((!state->paused) || (state->takeStep))
         {
-            for (y = 0; y < SCREEN_HEIGHT_IN_PX; y++)
-            {
-                for (x = 0; x < SCREEN_WIDTH_IN_PX; x++)
-                {
-                    location = (y * SCREEN_WIDTH_IN_PX) + x;
-                    newScreen[location] = ProcessCell(state, x, y);
-                }
-            }
+            AlgorithmHandlers[state->selectedAlgorith](state, newScreen);
             SDL_memcpy(state->screen, newScreen, sizeof(state->screen));
             state->takeStep = false;
         }
